@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Check‑in HUB • Admin</title>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --text:#0f172a; --muted:#64748b; --brand:#0a7cff; --ok:#0a7c2f; --err:#b00020; --warn:#b45309; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text)}
+    header{padding:16px 20px;background:#111827;color:#fff;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    header h1{font-size:18px;margin:0;font-weight:700}
+    header small{opacity:.8}
+    .wrap{max-width:980px;margin:24px auto;padding:0 16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:var(--card);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.08);padding:16px}
+    .card h3{margin:0 0 8px;font-size:16px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input[type="text"], input[type="file"], button, select {padding:11px 12px;font-size:15px;border-radius:10px;border:1px solid #dfe3ea}
+    button{background:var(--brand);color:#fff;border:none;font-weight:700;cursor:pointer}
+    button.secondary{background:#eef3ff;color:#0a3b7c}
+    button.ghost{background:transparent;color:var(--text);border:1px dashed #cbd5e1}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .muted{color:var(--muted);font-size:12px;margin-top:6px}
+    .status{margin-top:8px;font-weight:700}
+    .ok{color:var(--ok)} .err{color:var(--err)} .warn{color:var(--warn)}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border-bottom:1px solid #e5e7eb;padding:8px 6px;text-align:left}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    @media (max-width: 860px){.wrap{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🛠️ Check‑in HUB <small class="muted">(Admin)</small></h1>
+      <small>Projeto: Elane Nascimento Magalhães • Since Out 2025 • Shopee</small>
+    </div>
+    <div class="row">
+      <a href="./checkin.html" style="color:#fff;text-decoration:underline">Ir para a página de Check‑in</a>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section class="card">
+      <h3>Base de motoristas (CSV)</h3>
+      <p class="muted">Colunas: <b>A = Driver ID</b>, <b>B = Driver Name</b>.</p>
+      <div class="row">
+        <input id="csvFile" type="file" accept=".csv,text/csv" />
+        <button class="secondary" id="btnDemo">Carregar exemplo</button>
+        <button class="ghost" id="btnClearBase">Limpar base</button>
+      </div>
+      <div id="baseInfo" class="muted" style="margin-top:8px"></div>
+      <div style="max-height:180px;overflow:auto;margin-top:8px;border:1px solid #e5e7eb;border-radius:8px;display:none" id="tblWrap">
+        <table id="tbl"></table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Geofence & Regras</h3>
+      <div class="row">
+        <label>Lat: <input id="latBase" type="text" class="mono" style="width:160px" value="-22.798782412241856"></label>
+        <label>Lng: <input id="lngBase" type="text" class="mono" style="width:160px" value="-43.3489248374091"></label>
+        <label>Raio (km): <input id="raioKm" type="text" class="mono" style="width:100px" value="2"></label>
+      </div>
+      <div class="muted">As alterações são salvas localmente e usadas pela página de check‑in.</div>
+    </section>
+
+    <section class="card">
+      <h3>Logs</h3>
+      <div class="row">
+        <button id="btnExport" class="secondary">Exportar LOG (.csv)</button>
+        <button id="btnClearLog" class="ghost">Limpar LOG</button>
+        <button id="btnConnectFS" class="secondary">Conectar arquivo de LOG</button>
+        <button id="btnFlushFS" class="ghost">Forçar gravação</button>
+      </div>
+      <div style="max-height:300px;overflow:auto;margin-top:8px;border:1px solid #e5e7eb;border-radius:8px">
+        <table id="logTbl"><thead></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Vínculo de dispositivo (antifraude)</h3>
+      <div class="row">
+        <input id="adminPin" type="text" placeholder="PIN admin (opcional)" style="width:160px" />
+        <input id="freeId" type="text" placeholder="Driver ID para liberar" style="flex:1" />
+        <button id="btnFree">Liberar</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+  const ADMIN_PIN = "1234";
+  const STORAGE_KEYS = { base:'hub_csv_base_v1', logs:'hub_csv_logs_v1', binds:'hub_csv_binds_v1', cfg:'hub_csv_cfg_v1' };
+  let BASE=[], LOGS=[], BINDS={}, CFG={ latBase:-22.798782412241856, lngBase:-43.3489248374091, raioKm:2, exigirGps:true };
+  let FS={ handle:null, writable:null, queue:[] };
+  const csvCell=v=>`"${String(v).replaceAll('"','""')}"`; const toCsvRow=arr=>arr.map(csvCell).join(',');
+  const fmt2=n=>String(n).padStart(2,'0');
+  function loadAll(){ try{BASE=JSON.parse(localStorage.getItem(STORAGE_KEYS.base)||'[]')}catch{} try{LOGS=JSON.parse(localStorage.getItem(STORAGE_KEYS.logs)||'[]')}catch{} try{BINDS=JSON.parse(localStorage.getItem(STORAGE_KEYS.binds)||'{}')}catch{} try{CFG=Object.assign(CFG, JSON.parse(localStorage.getItem(STORAGE_KEYS.cfg)||'{}'))}catch{} }
+  function saveAll(){ localStorage.setItem(STORAGE_KEYS.base, JSON.stringify(BASE)); localStorage.setItem(STORAGE_KEYS.logs, JSON.stringify(LOGS)); localStorage.setItem(STORAGE_KEYS.binds, JSON.stringify(BINDS)); localStorage.setItem(STORAGE_KEYS.cfg, JSON.stringify(CFG)); }
+  function parseCSV(text){ const firstLine=(text.split(/\r?\n/,1)[0]||''); const delim=(firstLine.split(';').length>firstLine.split(',').length)?';':','; const rows=[]; let cur='',row=[],inQ=false; for(let i=0;i<text.length;i++){ const c=text[i]; if(c=='"'){ if(inQ&&text[i+1]=='"'){cur+='"'; i++;} else inQ=!inQ; } else if(c==delim && !inQ){ row.push(cur); cur=''; } else if((c=='\n'||c=='\r') && !inQ){ if(cur!==''||row.length){ row.push(cur); rows.push(row); row=[]; cur=''; } if(c=='\r'&&text[i+1]=='\n') i++; } else cur+=c; } if(cur!==''||row.length){ row.push(cur); rows.push(row); } return rows.filter(r=>r.length&&r.some(v=>String(v).trim()!=='')); }
+  function renderBase(){ const el=document.getElementById('baseInfo'); const wrap=document.getElementById('tblWrap'); const tbl=document.getElementById('tbl'); el.innerHTML=BASE.length?`Base: <b>${BASE.length}</b> registros.`:'Nenhuma base carregada.'; if(!BASE.length){ wrap.style.display='none'; tbl.innerHTML=''; return; } wrap.style.display='block'; const head='<thead><tr><th>#</th><th>Driver ID</th><th>Driver Name</th></tr></thead>'; const rows=BASE.slice(0,12).map((r,i)=>`<tr><td>${i+1}</td><td class="mono">${r.id}</td><td>${r.name}</td></tr>`).join(''); tbl.innerHTML=head+`<tbody>${rows}</tbody>`; }
+  function renderLogs(){ const t=document.getElementById('logTbl'); t.querySelector('thead').innerHTML='<tr><th>Data</th><th>Hora</th><th>ID</th><th>Nome</th><th>Lat</th><th>Lng</th><th>Acc</th><th>Dist(km)</th><th>Status</th><th>Device</th></tr>'; t.querySelector('tbody').innerHTML=LOGS.slice(-400).reverse().map(l=>`<tr><td>${l.date}</td><td>${l.time}</td><td class="mono">${l.id}</td><td>${l.name||''}</td><td class="mono">${l.lat??''}</td><td class="mono">${l.lng??''}</td><td>${l.acc??''}</td><td>${l.dist_km??''}</td><td>${l.geofence}</td><td class="mono">${(l.device||'').slice(0,8)}…</td></tr>`).join(''); }
+  function exportLogs(){ const headers=['DATA','HORA','ID DRIVER','DRIVER','LAT','LNG','ACCURACY','DIST_KM','GEOFENCE_STATUS','DEVICE_ID','USER_AGENT']; const rows=LOGS.map(l=>[l.date,l.time,l.id,l.name||'',l.lat??'',l.lng??'',l.acc??'',l.dist_km??'',l.geofence||'',l.device||'',l.ua||'']); const csv=[headers,...rows].map(r=>r.map(csvCell).join(',')).join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=Object.assign(document.createElement('a'),{href:url,download:`checkin_log_${Date.now()}.csv`}); document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+  async function connectFS(){ if(!('showSaveFilePicker' in window)){ alert('Navegador sem suporte ao File System Access.'); return; } try{ const handle=await window.showSaveFilePicker({ suggestedName:`checkin_log_${Date.now()}.csv`, types:[{description:'CSV',accept:{'text/csv':['.csv']}}]}); FS.handle=handle; FS.writable=await handle.createWritable({keepExistingData:true}); const header=toCsvRow(['DATA','HORA','ID DRIVER','DRIVER','LAT','LNG','ACCURACY','DIST_KM','GEOFENCE_STATUS','DEVICE_ID','USER_AGENT'])+'\n'; await FS.writable.write(header + LOGS.map(l=>toCsvRow([l.date,l.time,l.id,l.name||'',l.lat??'',l.lng??'',l.acc??'',l.dist_km??'',l.geofence||'',l.device||'',l.ua||''])).join('\n') + (LOGS.length?'\n':'')); await FS.writable.flush(); alert('Arquivo de LOG conectado com sucesso.'); }catch(e){ console.warn(e); alert('Falha ao conectar.'); } }
+  async function maybeFlushFS(){ if(!FS.writable||!FS.queue.length) return; try{ const chunk=FS.queue.join(''); FS.queue.length=0; await FS.writable.write(chunk); await FS.writable.flush(); }catch(e){ console.warn('Falha ao gravar no arquivo conectado:',e); } }
+  async function forceFlushFS(){ await maybeFlushFS(); alert('Gravação solicitada.'); }
+  function tryFree(){ const pin=document.getElementById('adminPin').value.trim(); const id=(document.getElementById('freeId').value||'').replace(/\D+/g,''); if(!id){ alert('Informe o Driver ID.'); return; } if(ADMIN_PIN && pin!==ADMIN_PIN){ alert('PIN inválido.'); return; } const binds=JSON.parse(localStorage.getItem(STORAGE_KEYS.binds)||'{}'); if(binds[id]){ delete binds[id]; localStorage.setItem(STORAGE_KEYS.binds, JSON.stringify(binds)); alert('Dispositivo liberado para este ID.'); } else { alert('Este ID não possui vínculo.'); } }
+  function init(){ loadAll(); renderBase(); renderLogs(); document.getElementById('latBase').value=CFG.latBase; document.getElementById('lngBase').value=CFG.lngBase; document.getElementById('raioKm').value=CFG.raioKm;
+    document.getElementById('csvFile').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const rows=parseCSV(String(r.result||'')); const hasHeader=/[A-Za-z]/.test(rows[0][0]||'') || /[A-Za-z]/.test(rows[0][1]||''); const start=hasHeader?1:0; const arr=[]; for(let i=start;i<rows.length;i++){ const id=(rows[i][0]||'').replace(/\D+/g,''); const name=String(rows[i][1]||'').trim(); if(!id) continue; arr.push({id,name}); } BASE=arr; saveAll(); renderBase(); }; r.readAsText(f); });
+    document.getElementById('btnDemo').addEventListener('click', ()=>{ const txt='Driver ID,Driver Name\n2722586,CLEBER DE MATTOS SAMPAIO\n1234567,JOAO DA SILVA\n9876543,MARIA PEREIRA'; const rows=txt.split('\n').slice(1).map(l=>l.split(',')); BASE=rows.map(r=>({id:r[0], name:r[1]})); saveAll(); renderBase(); });
+    document.getElementById('btnClearBase').addEventListener('click', ()=>{ if(confirm('Limpar base?')){ BASE=[]; saveAll(); renderBase(); } });
+    document.getElementById('latBase').addEventListener('input', e=>{ CFG.latBase=Number(e.target.value||0); saveAll(); });
+    document.getElementById('lngBase').addEventListener('input', e=>{ CFG.lngBase=Number(e.target.value||0); saveAll(); });
+    document.getElementById('raioKm').addEventListener('input', e=>{ CFG.raioKm=Number(e.target.value||0); saveAll(); });
+    document.getElementById('btnExport').addEventListener('click', exportLogs);
+    document.getElementById('btnClearLog').addEventListener('click', ()=>{ if(confirm('Apagar TODOS os logs?')){ LOGS=[]; saveAll(); renderLogs(); } });
+    document.getElementById('btnConnectFS').addEventListener('click', connectFS);
+    document.getElementById('btnFlushFS').addEventListener('click', forceFlushFS);
+    document.getElementById('btnFree').addEventListener('click', tryFree);
+  }
+  document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

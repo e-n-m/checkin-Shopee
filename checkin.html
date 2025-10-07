@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Check‑in HUB • Motorista</title>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --text:#0f172a; --muted:#64748b; --brand:#0a7cff; --ok:#0a7c2f; --err:#b00020; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text)}
+    header{padding:16px 20px;background:#111827;color:#fff;display:flex;gap:12px;align-items:center;justify-content:space-between}
+    header h1{font-size:18px;margin:0;font-weight:700}
+    header small{opacity:.8}
+    .wrap{max-width:720px;margin:24px auto;padding:0 16px}
+    .card{background:var(--card);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.08);padding:16px}
+    .card h3{margin:0 0 8px;font-size:16px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input[type="text"], button {padding:14px 14px;font-size:18px;border-radius:10px;border:1px solid #dfe3ea}
+    button{background:var(--brand);color:#fff;border:none;font-weight:700;cursor:pointer}
+    button.secondary{background:#eef3ff;color:#0a3b7c}
+    .muted{color:var(--muted);font-size:12px;margin-top:6px}
+    .status{margin-top:14px;font-weight:800}
+    .ok{color:var(--ok)} .err{color:var(--err)}
+    .badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12px;border:1px solid #e5e7eb}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>📍 Check‑in HUB <small class="muted">(Motorista)</small></h1>
+      <small>Projeto: Elane Nascimento Magalhães • Since Out 2025 • Shopee</small>
+    </div>
+    <div class="row">
+      <span class="badge">Permissão: <b id="permState">?</b></span>
+      <span class="badge">Raio: <b id="radiusInfo">—</b> km</span>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section class="card">
+      <h3>Check‑in</h3>
+      <div class="row">
+        <input id="idInput" type="text" inputmode="numeric" placeholder="Digite seu Driver ID" style="flex:1;min-width:240px" />
+        <button id="btnCheck">Registrar check‑in</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnEnable" class="secondary" style="display:none">Habilitar localização</button>
+        <span class="muted">Ative a localização e permita o acesso quando solicitado.</span>
+      </div>
+      <div id="tips" class="muted" style="background:#fff7e6;border:1px solid #ffd18a;border-radius:10px;padding:10px;margin-top:8px;display:none"></div>
+      <div id="out" class="status"></div>
+    </section>
+  </div>
+
+  <script>
+  // ==== storage/config (compartilhado) ====
+  const STORAGE_KEYS = { base:'hub_csv_base_v1', logs:'hub_csv_logs_v1', binds:'hub_csv_binds_v1', cfg:'hub_csv_cfg_v1' };
+  let BASE=[], LOGS=[], BINDS={}, CFG={ latBase:-22.798782412241856, lngBase:-43.3489248374091, raioKm:2, exigirGps:true };
+  const fmt2=n=>String(n).padStart(2,'0');
+  const nowParts=()=>{const d=new Date();return{date:`${d.getFullYear()}-${fmt2(d.getMonth()+1)}-${fmt2(d.getDate())}`,time:`${fmt2(d.getHours())}:${fmt2(d.getMinutes())}:${fmt2(d.getSeconds())}`}};
+  function loadAll(){ try{BASE=JSON.parse(localStorage.getItem(STORAGE_KEYS.base)||'[]')}catch{} try{LOGS=JSON.parse(localStorage.getItem(STORAGE_KEYS.logs)||'[]')}catch{} try{BINDS=JSON.parse(localStorage.getItem(STORAGE_KEYS.binds)||'{}')}catch{} try{CFG=Object.assign(CFG, JSON.parse(localStorage.getItem(STORAGE_KEYS.cfg)||'{}'))}catch{} }
+  function saveAll(){ localStorage.setItem(STORAGE_KEYS.logs, JSON.stringify(LOGS)); localStorage.setItem(STORAGE_KEYS.binds, JSON.stringify(BINDS)); }
+  const normId=v=>String(v??'').trim().replace(/\.[0-9]+$/,'').replace(/\D+/g,'');
+  function deviceId(){ let id=localStorage.getItem('hub_device_id'); if(!id){ id=cryptoRandomId(); localStorage.setItem('hub_device_id', id);} return id; }
+  function cryptoRandomId(){ const a=crypto.getRandomValues(new Uint8Array(16)); a[6]=(a[6]&0x0f)|0x40; a[8]=(a[8]&0x3f)|0x80; return Array.from(a).map((v,i)=>(i===4||i===6||i===8||i===10?'-':'')+v.toString(16).padStart(2,'0')).join(''); }
+  function haversineKm(lat1, lon1, lat2, lon2){ const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180; const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2; return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
+  function findDriver(id){ const nid=normId(id); return BASE.find(r=>normId(r.id)===nid) || null; }
+  function logEntry(e){ LOGS.push(e); saveAll(); }
+
+  // ==== permissões ====
+  async function checkGeoPermission(){
+    const tips=document.getElementById('tips'); const enableBtn=document.getElementById('btnEnable');
+    if(!('permissions' in navigator) || !navigator.permissions.query){ document.getElementById('permState').textContent='n/d'; return; }
+    try{ const st=await navigator.permissions.query({name:'geolocation'}); document.getElementById('permState').textContent=st.state; renderTips(st.state); st.onchange=()=>{ document.getElementById('permState').textContent=st.state; renderTips(st.state); }; }catch{ document.getElementById('permState').textContent='n/d'; }
+    function renderTips(state){
+      if(state==='granted'){ tips.style.display='none'; enableBtn.style.display='none'; return; }
+      let msg='Para registrar o check‑in é necessário permitir a localização.';
+      const ua=navigator.userAgent||'';
+      if(/Android/i.test(ua)){ msg+='<br><b>Android (Chrome)</b>: toque em “Habilitar localização” e permita o acesso. Se já negou, use o cadeado na barra de endereço → Localização → Permitir.'; }
+      else if(/iPhone|iPad|iPod/i.test(ua)){ msg+='<br><b>iOS (Safari)</b>: Ajustes → Privacidade → Serviços de Localização → Safari Websites → Ao usar o app.'; }
+      tips.innerHTML=msg; tips.style.display='block'; enableBtn.style.display='inline-block';
+    }
+  }
+  function askToEnableLocation(){ const opts={enableHighAccuracy:true, timeout:10000, maximumAge:0}; if(navigator.geolocation){ navigator.geolocation.getCurrentPosition(()=>{},()=>{},opts); } }
+
+  // ==== fluxo de check‑in ====
+  function doCheckin(){
+    const out=document.getElementById('out'); const btn=document.getElementById('btnCheck');
+    const idRaw=document.getElementById('idInput').value.trim();
+    if(!idRaw){ out.innerHTML='<span class="err">Informe o Driver ID.</span>'; return; }
+    const drv=findDriver(idRaw);
+    if(!drv){ out.innerHTML='<span class="err">ID não encontrado na base.</span>'; return; }
+    const opts={enableHighAccuracy:true, timeout:15000, maximumAge:0};
+    btn.disabled=true; btn.textContent='Capturando localização…'; out.textContent='';
+
+    function onSuccess(lat,lng,acc){
+      const id=normId(idRaw); const dev=deviceId();
+      const bound=BINDS[id]; if(bound && bound!==dev){ btn.disabled=false; btn.textContent='Registrar check‑in'; out.innerHTML='<span class="err">ID vinculado a outro dispositivo. Solicite liberação.</span>'; const {date,time}=nowParts(); logEntry({date,time,id,name:drv.name,lat,lng,acc,dist_km:'',geofence:'DEVICE_MISMATCH',device:dev,ua:navigator.userAgent}); return; }
+      if(!bound){ BINDS[id]=dev; saveAll(); }
+      const dist=haversineKm(CFG.latBase, CFG.lngBase, Number(lat), Number(lng));
+      const inside=dist<=Number(CFG.raioKm||0);
+      const {date,time}=nowParts();
+      if(!inside){ out.innerHTML='<span class="err">Fora do raio permitido para check-in.</span>'; logEntry({date,time,id,name:drv.name,lat,lng,acc,dist_km:dist.toFixed(3),geofence:'FORA_RAIO',device:dev,ua:navigator.userAgent}); }
+      else{ out.innerHTML='<span class="ok">✅ Check-in realizado com sucesso!</span>'; logEntry({date,time,id,name:drv.name,lat,lng,acc,dist_km:dist.toFixed(3),geofence:'DENTRO_RAIO',device:dev,ua:navigator.userAgent}); }
+      btn.disabled=false; btn.textContent='Registrar check‑in';
+    }
+    function onError(err){ btn.disabled=false; btn.textContent='Registrar check‑in'; out.innerHTML='<span class="err">Permita a localização para realizar o check‑in.</span>'; checkGeoPermission(); }
+
+    let watchId=null, gaveUp=false;
+    try{
+      watchId=navigator.geolocation.watchPosition((p)=>{ if(watchId!=null){navigator.geolocation.clearWatch(watchId); watchId=null;} const {latitude,longitude,accuracy}=p.coords||{}; onSuccess(latitude,longitude,accuracy); }, (e)=>{ if(watchId!=null){navigator.geolocation.clearWatch(watchId); watchId=null;} if(!gaveUp){ navigator.geolocation.getCurrentPosition((p)=>{ const {latitude,longitude,accuracy}=p.coords||{}; onSuccess(latitude,longitude,accuracy); }, onError, opts); } }, opts);
+      setTimeout(()=>{ if(watchId!=null){ gaveUp=true; navigator.geolocation.clearWatch(watchId); watchId=null; navigator.geolocation.getCurrentPosition((p)=>{ const {latitude,longitude,accuracy}=p.coords||{}; onSuccess(latitude,longitude,accuracy); }, onError, opts); } },7000);
+    }catch{ navigator.geolocation.getCurrentPosition((p)=>{ const {latitude,longitude,accuracy}=p.coords||{}; onSuccess(latitude,longitude,accuracy); }, onError, opts); }
+  }
+
+  function init(){
+    loadAll(); document.getElementById('radiusInfo').textContent=CFG.raioKm; checkGeoPermission();
+    document.getElementById('btnCheck').addEventListener('click', doCheckin);
+    document.getElementById('btnEnable').addEventListener('click', askToEnableLocation);
+  }
+  document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
