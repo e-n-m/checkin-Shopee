@@ -114,7 +114,7 @@
     // --- carregar CSV de motoristas ---
     async function carregarCSV(){
       try{
-        const res = await fetch(CSV_URL, { cache:'no-store' });
+        const res = await fetch(`${CSV_URL}?v=${Date.now()}`);
         if(!res.ok) throw new Error('Erro ao carregar drivers.csv ('+res.status+')');
         const text = await res.text();
 
