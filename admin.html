@@ -112,4 +112,37 @@ document.getElementById('showDev').onclick = ()=>{
 document.getElementById('clearDev').onclick = ()=>{
   localStorage.removeItem('hub_device_id');
   localStorage.removeItem('hub_device_info');
-  document.getElementById('devOut').textContent = 'Apagado
+  document.getElementById('devOut').textContent = 'Apagado neste navegador.';
+};
+
+/* ======== Logs ======== */
+function getLogs(){
+  try{ return JSON.parse(localStorage.getItem('hub_logs')||'[]'); }
+  catch(_){ return []; }
+}
+function preview(){
+  const data = getLogs();
+  document.getElementById('logInfo').textContent = data.length + ' registros';
+  document.getElementById('peek').textContent = JSON.stringify(data.slice(-10), null, 2);
+}
+preview();
+
+document.getElementById('dump').onclick = ()=>{
+  const data = getLogs();
+  if (!data.length){ alert('Sem registros'); return; }
+  const header = ['ts','id','driver','lat','lng','acc','dev'];
+  const lines = [header.join(',')].concat(
+    data.map(r => header.map(k => (r[k]==null?'':String(r[k]).replace(/"/g,'""'))).map(s=>`"${s}"`).join(','))
+  );
+  const csv = lines.join('\n');
+  download('checkins.csv', csv);
+};
+
+document.getElementById('clear').onclick = ()=>{
+  if (!confirm('Remover todos os registros deste navegador?')) return;
+  localStorage.removeItem('hub_logs');
+  preview();
+};
+</script>
+</body>
+</html>
