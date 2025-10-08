@@ -1,150 +1,142 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Check-in HUB (Admin)</title>
-
-  <link rel="icon" href="favicon.ico" />
-
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Check-in HUB • Admin</title>
+  <link rel="icon" href="favicon.ico"/>
   <style>
     :root{
-      --terracota:#E55A36; --terracota-dk:#cf4f30;
-      --bg:#f5f6f8; --card:#ffffff; --txt:#1b1d22; --muted:#6b7280;
-      --ok:#0a7f2f; --warn:#8a4b16; --danger:#a32121;
+      --terracotta:#E55A36;
+      --bg:#f6f7f9; --card:#fff; --txt:#1b1d22; --muted:#6b7280;
+      --ring:rgba(0,0,0,.08); --ok:#128754; --err:#b91c1c;
     }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-    header{background:#0B1324;color:#fff;padding:16px;display:flex;align-items:center;gap:12px}
-    header img{height:22px}
-    header .sub{color:#a5b0c9;font-size:12px}
-    main{max-width:1100px;margin:24px auto;padding:0 16px}
+    header{background:#0f172a;color:#fff;padding:14px 18px;display:flex;gap:10px;align-items:center}
+    header .logo{width:24px;height:24px;background:url('shopito.svg') center/cover no-repeat;border-radius:6px}
+    header .title{font-weight:600}
+    .wrap{max-width:980px;margin:28px auto;padding:0 16px}
+    .card{background:var(--card);border-radius:16px;box-shadow:0 24px 48px var(--ring);padding:22px;margin-bottom:18px}
     h2{margin:0 0 12px}
-    .card{background:var(--card);border-radius:16px;padding:20px;box-shadow:0 10px 24px rgba(0,0,0,.08);margin-bottom:18px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    input[type=text], input[type=number]{
-      padding:10px 12px;border:1px solid #e3e5ea;border-radius:10px
-    }
-    .btn{background:var(--terracota);color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
-    .btn:hover{background:var(--terracota-dk)}
-    table{border-collapse:collapse;width:100%}
-    th,td{padding:8px 10px;border-bottom:1px solid #eef0f4;text-align:left}
     .muted{color:var(--muted)}
+    .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;background:var(--terracotta);color:#fff}
+    .btn.secondary{background:#eef2f7;color:#111}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0b1220;color:#cbd5e1;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;padding:14px;border-radius:12px;max-height:420px;overflow:auto}
+    .ok{color:var(--ok)} .err{color:var(--err)}
+    dialog{border:0;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.35);padding:0}
+    dialog form{padding:22px}
+    dialog h3{margin:0 0 10px}
+    dialog input{width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:10px;font-size:16px}
   </style>
 </head>
 <body>
   <header>
-    <img src="shopito.svg" alt="Shopito" />
-    <div>
-      <div><strong>Check-in HUB</strong> <span style="background:#fff;color:#0b1324;padding:2px 8px;border-radius:999px;font-size:12px">Admin</span></div>
-      <div class="sub">Operação Shopee • Console de administração</div>
-    </div>
+    <span class="logo" aria-hidden="true"></span>
+    <span class="title">Check-in HUB</span>
+    <span class="muted">Admin • Logs locais do motorista</span>
   </header>
 
-  <main>
-    <!-- Geofence & Regras -->
+  <main class="wrap" id="app" style="display:none">
     <section class="card">
-      <h2>Geofence & Regras</h2>
-      <div class="row">
-        <label>Lat: <input id="lat" type="text" style="width:180px"></label>
-        <label>Lng: <input id="lng" type="text" style="width:200px"></label>
-        <label>Raio (km): <input id="raio" type="number" step="0.1" style="width:90px"></label>
-        <button id="btnSalvarGeo" class="btn">Salvar</button>
+      <h2>Registros de Check-in (neste navegador)</h2>
+      <div class="row" style="margin-bottom:10px">
+        <button id="btnDownload" class="btn">Baixar CSV</button>
+        <button id="btnClear" class="btn secondary">Limpar logs</button>
+        <span id="hint" class="muted" style="align-self:center"></span>
       </div>
-      <div class="muted" style="margin-top:6px">As alterações são salvas localmente e usadas pela página do check-in.</div>
+      <pre id="json"></pre>
+      <div class="muted">Obs.: os registros acima são <b>locais</b> deste navegador do motorista. Para centralização, você pode exportar e subir o CSV conforme a sua operação.</div>
     </section>
 
-    <!-- Logs locais do motorista (no navegador) -->
     <section class="card">
-      <h2>Registros de Check-in (armazenados no navegador do motorista)</h2>
-      <div class="row" style="margin-bottom:10px">
-        <button id="btnExport" class="btn">Baixar CSV</button>
-        <button id="btnClear" class="btn" style="background:#2b2f36">Limpar logs</button>
-      </div>
-      <div style="overflow:auto;max-height:420px">
-        <table id="tbl">
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Hora</th>
-              <th>ID</th>
-              <th>Nome</th>
-              <th>Lat</th>
-              <th>Lng</th>
-              <th>Acc</th>
-              <th>Device</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <h2>Geofence (somente leitura)</h2>
+      <div class="muted">Os parâmetros de geofence são definidos no <code>index.html</code> (LAT/LNG/RAIO_KM). Alterações exigem commit no repositório.</div>
     </section>
   </main>
 
-  <script>
-    const $ = s=>document.querySelector(s);
+  <!-- Modal PIN -->
+  <dialog id="guard">
+    <form method="dialog">
+      <section style="padding:16px 22px 8px;border-bottom:1px solid #eee"><h3>Autenticação</h3></section>
+      <section style="padding:14px 22px 8px">
+        <p class="muted" style="margin-top:0">Digite o PIN de admin para acessar.</p>
+        <input id="pin" type="password" placeholder="PIN admin" autofocus />
+        <div id="pinMsg" class="err" style="margin-top:8px"></div>
+      </section>
+      <section style="display:flex;gap:10px;justify-content:flex-end;padding:0 22px 18px">
+        <button class="btn secondary" value="cancel">Cancelar</button>
+        <button id="btnEnter" class="btn" value="ok">Entrar</button>
+      </section>
+    </form>
+  </dialog>
 
-    // ====== carregar/mostrar logs locais (do mesmo navegador) ======
-    function carregarLogs(){
-      const tb = $('#tbl tbody'); tb.innerHTML='';
-      const rows = JSON.parse(localStorage.getItem('checkin_logs')||'[]');
-      rows.sort((a,b)=> new Date(b.ts)-new Date(a.ts));
-      for(const r of rows){
-        const dt = new Date(r.ts);
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${dt.toLocaleDateString()}</td>
-          <td>${dt.toLocaleTimeString()}</td>
-          <td>${r.id}</td>
-          <td>${r.driver||''}</td>
-          <td>${(+r.lat).toFixed(6)}</td>
-          <td>${(+r.lng).toFixed(6)}</td>
-          <td>${r.acc ?? ''}</td>
-          <td style="font-family:monospace">${r.dev||''}</td>
-        `;
-        tb.appendChild(tr);
-      }
+  <script>
+    const ADMIN_PIN = 'Shopee102025';
+    const K = 'checkin_logs';
+
+    const $ = sel => document.querySelector(sel);
+
+    function getLogs(){
+      try{ return JSON.parse(localStorage.getItem(K)||'[]'); }
+      catch{ return []; }
+    }
+    function setLogs(arr){
+      localStorage.setItem(K, JSON.stringify(arr||[]));
+    }
+    function toCSV(arr){
+      const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+      const head = ['ts','id','driver','lat','lng','acc'];
+      const lines = [head.join(',')];
+      arr.forEach(r=>{
+        lines.push([r.ts,r.id,r.driver,r.lat,r.lng,r.acc].map(esc).join(','));
+      });
+      return lines.join('\n');
+    }
+    function refresh(){
+      const arr = getLogs();
+      $("#json").textContent = JSON.stringify(arr, null, 2);
+      $("#hint").textContent = `${arr.length} registro(s)`;
     }
 
-    function baixarCSV(){
-      const head = ['ts','id','driver','lat','lng','acc','dev'];
-      const rows = JSON.parse(localStorage.getItem('checkin_logs')||'[]');
-      const lines = [head.join(',')].concat(
-        rows.map(r=> head.map(h=>csvCell(r[h])).join(','))
-      );
-      const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8'});
+    // Download CSV
+    $("#btnDownload").onclick = ()=>{
+      const csv = toCSV(getLogs());
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'checkin-log-local.csv';
+      a.download = `checkin_logs_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(a.href);
-    }
-    function csvCell(v){
-      if(v==null) return '';
-      const s = String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
-    }
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 500);
+    };
 
-    // ====== geofence (salvar/ler) ======
-    function carregarGeo(){
-      $('#lat').value  = localStorage.getItem('cfg_lat')  ?? '-22.798782412241856';
-      $('#lng').value  = localStorage.getItem('cfg_lng')  ?? '-43.3498248374091';
-      $('#raio').value = localStorage.getItem('cfg_raio') ?? '2';
-    }
-    function salvarGeo(){
-      localStorage.setItem('cfg_lat',  $('#lat').value.trim());
-      localStorage.setItem('cfg_lng',  $('#lng').value.trim());
-      localStorage.setItem('cfg_raio', $('#raio').value.trim());
-      alert('Geofence atualizada. A página de motorista usará esses valores.');
-    }
+    // Limpar
+    $("#btnClear").onclick = ()=>{
+      if(confirm('Tem certeza que deseja limpar os logs deste navegador?')){
+        setLogs([]);
+        refresh();
+      }
+    };
 
-    // init
-    carregarGeo();
-    carregarLogs();
-
-    $('#btnClear').onclick  = ()=>{ localStorage.removeItem('checkin_logs'); carregarLogs() };
-    $('#btnExport').onclick = baixarCSV;
-    $('#btnSalvarGeo').onclick = salvarGeo;
+    // PIN Gate
+    (function guard(){
+      const dlg = $("#guard");
+      dlg.showModal();
+      $("#btnEnter").addEventListener('click', (e)=>{
+        e.preventDefault();
+        const pin = $("#pin").value.trim();
+        if(pin === ADMIN_PIN){
+          dlg.close();
+          $("#app").style.display = 'block';
+          refresh();
+        }else{
+          $("#pinMsg").textContent = 'PIN inválido.';
+        }
+      });
+    })();
   </script>
 </body>
 </html>
