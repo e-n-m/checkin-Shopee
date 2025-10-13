@@ -1,142 +1,20 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Check-in HUB • Admin</title>
-  <link rel="icon" href="favicon.ico"/>
-  <style>
-    :root{
-      --terracotta:#E55A36;
-      --bg:#f6f7f9; --card:#fff; --txt:#1b1d22; --muted:#6b7280;
-      --ring:rgba(0,0,0,.08); --ok:#128754; --err:#b91c1c;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-    header{background:#0f172a;color:#fff;padding:14px 18px;display:flex;gap:10px;align-items:center}
-    header .logo{width:24px;height:24px;background:url('shopito.svg') center/cover no-repeat;border-radius:6px}
-    header .title{font-weight:600}
-    .wrap{max-width:980px;margin:28px auto;padding:0 16px}
-    .card{background:var(--card);border-radius:16px;box-shadow:0 24px 48px var(--ring);padding:22px;margin-bottom:18px}
-    h2{margin:0 0 12px}
-    .muted{color:var(--muted)}
-    .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;background:var(--terracotta);color:#fff}
-    .btn.secondary{background:#eef2f7;color:#111}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    pre{white-space:pre-wrap;word-break:break-word;background:#0b1220;color:#cbd5e1;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;padding:14px;border-radius:12px;max-height:420px;overflow:auto}
-    .ok{color:var(--ok)} .err{color:var(--err)}
-    dialog{border:0;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.35);padding:0}
-    dialog form{padding:22px}
-    dialog h3{margin:0 0 10px}
-    dialog input{width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:10px;font-size:16px}
-  </style>
-</head>
-<body>
-  <header>
-    <span class="logo" aria-hidden="true"></span>
-    <span class="title">Check-in HUB</span>
-    <span class="muted">Admin • Logs locais do motorista</span>
-  </header>
-
-  <main class="wrap" id="app" style="display:none">
-    <section class="card">
-      <h2>Registros de Check-in (neste navegador)</h2>
-      <div class="row" style="margin-bottom:10px">
-        <button id="btnDownload" class="btn">Baixar CSV</button>
-        <button id="btnClear" class="btn secondary">Limpar logs</button>
-        <span id="hint" class="muted" style="align-self:center"></span>
-      </div>
-      <pre id="json"></pre>
-      <div class="muted">Obs.: os registros acima são <b>locais</b> deste navegador do motorista. Para centralização, você pode exportar e subir o CSV conforme a sua operação.</div>
-    </section>
-
-    <section class="card">
-      <h2>Geofence (somente leitura)</h2>
-      <div class="muted">Os parâmetros de geofence são definidos no <code>index.html</code> (LAT/LNG/RAIO_KM). Alterações exigem commit no repositório.</div>
-    </section>
-  </main>
-
-  <!-- Modal PIN -->
-  <dialog id="guard">
-    <form method="dialog">
-      <section style="padding:16px 22px 8px;border-bottom:1px solid #eee"><h3>Autenticação</h3></section>
-      <section style="padding:14px 22px 8px">
-        <p class="muted" style="margin-top:0">Digite o PIN de admin para acessar.</p>
-        <input id="pin" type="password" placeholder="PIN admin" autofocus />
-        <div id="pinMsg" class="err" style="margin-top:8px"></div>
-      </section>
-      <section style="display:flex;gap:10px;justify-content:flex-end;padding:0 22px 18px">
-        <button class="btn secondary" value="cancel">Cancelar</button>
-        <button id="btnEnter" class="btn" value="ok">Entrar</button>
-      </section>
-    </form>
-  </dialog>
-
-  <script>
-    const ADMIN_PIN = 'Shopee102025';
-    const K = 'checkin_logs';
-
-    const $ = sel => document.querySelector(sel);
-
-    function getLogs(){
-      try{ return JSON.parse(localStorage.getItem(K)||'[]'); }
-      catch{ return []; }
-    }
-    function setLogs(arr){
-      localStorage.setItem(K, JSON.stringify(arr||[]));
-    }
-    function toCSV(arr){
-      const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
-      const head = ['ts','id','driver','lat','lng','acc'];
-      const lines = [head.join(',')];
-      arr.forEach(r=>{
-        lines.push([r.ts,r.id,r.driver,r.lat,r.lng,r.acc].map(esc).join(','));
-      });
-      return lines.join('\n');
-    }
-    function refresh(){
-      const arr = getLogs();
-      $("#json").textContent = JSON.stringify(arr, null, 2);
-      $("#hint").textContent = `${arr.length} registro(s)`;
-    }
-
-    // Download CSV
-    $("#btnDownload").onclick = ()=>{
-      const csv = toCSV(getLogs());
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `checkin_logs_${new Date().toISOString().slice(0,10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 500);
-    };
-
-    // Limpar
-    $("#btnClear").onclick = ()=>{
-      if(confirm('Tem certeza que deseja limpar os logs deste navegador?')){
-        setLogs([]);
-        refresh();
+{
+  "rules": {
+    ".read": false,
+    "checkins": {
+      ".read": true,            // <- TEMPORÁRIO para a tela admin
+      "$pushId": {
+        ".write": "auth == null",
+        ".validate": "
+          newData.hasChildren(['id','nome','ts','lat','lng','acc']) &&
+          newData.child('id').isString() &&
+          newData.child('nome').isString() &&
+          newData.child('ts').isNumber() &&
+          newData.child('lat').isNumber() &&
+          newData.child('lng').isNumber() &&
+          newData.child('acc').isNumber()
+        "
       }
-    };
-
-    // PIN Gate
-    (function guard(){
-      const dlg = $("#guard");
-      dlg.showModal();
-      $("#btnEnter").addEventListener('click', (e)=>{
-        e.preventDefault();
-        const pin = $("#pin").value.trim();
-        if(pin === ADMIN_PIN){
-          dlg.close();
-          $("#app").style.display = 'block';
-          refresh();
-        }else{
-          $("#pinMsg").textContent = 'PIN inválido.';
-        }
-      });
-    })();
-  </script>
-</body>
-</html>
+    }
+  }
+}
